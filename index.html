@@ -1,37 +1,53 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Foto 360</title>
 
-  <link rel="stylesheet" href="pannellum/pannellum.css">
+  <!-- ATENÇÃO: pasta "pannellum" precisa ter pannellum.css e pannellum.js -->
+  <link rel="stylesheet" href="./pannellum/pannellum.css" />
 
   <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-    }
-    #panorama {
-      width: 100%;
-      height: 100vh;
+    html, body { height: 100%; margin: 0; }
+    #panorama { width: 100%; height: 100vh; background: #000; }
+    #erro {
+      position: fixed; left: 12px; bottom: 12px;
+      padding: 10px 12px; background: rgba(0,0,0,.7); color: #fff;
+      font-family: Arial, sans-serif; font-size: 14px; border-radius: 8px;
+      display: none;
     }
   </style>
 </head>
 <body>
+  <div id="panorama"></div>
+  <div id="erro"></div>
 
-<div id="panorama"></div>
+  <script src="./pannellum/pannellum.js"></script>
+  <script>
+    function showErr(msg){
+      const el = document.getElementById('erro');
+      el.style.display = 'block';
+      el.textContent = msg;
+    }
 
-<script src="pannellum/pannellum.js"></script>
-<script>
-  pannellum.viewer('panorama', {
-    type: 'equirectangular',
-    panorama: 'DJI_0210.jpg',
-    autoLoad: true,
-    showZoomCtrl: true,
-    showFullscreenCtrl: true
-  });
-</script>
-
+    if (typeof pannellum === "undefined") {
+      showErr("Erro: pannellum.js não carregou. Verifique a pasta ./pannellum/ e os nomes dos arquivos.");
+    } else {
+      try {
+        pannellum.viewer('panorama', {
+          type: 'equirectangular',
+          // NOME EXATO do seu arquivo:
+          panorama: './DJI_0210.JPG',
+          autoLoad: true,
+          showZoomCtrl: true,
+          showFullscreenCtrl: true,
+          mouseZoom: true
+        });
+      } catch (e) {
+        showErr("Erro ao abrir a foto 360: " + e.message);
+      }
+    }
+  </script>
 </body>
 </html>
