@@ -46,11 +46,11 @@
 
 <script src="./pannellum/pannellum.js"></script>
 <script>
-  const ERRO = document.getElementById('erro');
+  const erroBox = document.getElementById('erro');
 
   function mostrarErro(msg) {
-    ERRO.innerText = msg;
-    ERRO.style.display = 'block';
+    erroBox.innerText = msg;
+    erroBox.style.display = 'block';
   }
 
   if (typeof pannellum === "undefined") {
@@ -60,7 +60,7 @@
       pannellum.viewer('panorama', {
         type: 'equirectangular',
 
-        // 🔴 URL ABSOLUTA (mais estável no GitHub Pages)
+        // 🔴 URL ABSOLUTA DA IMAGEM
         panorama: 'https://marcospsbio.github.io/foto360/DJI_0210.JPG',
 
         autoLoad: true,
@@ -68,10 +68,8 @@
         showFullscreenCtrl: true,
         mouseZoom: true,
 
-        // 🔧 AJUSTES IMPORTANTES PARA CELULAR
-        hfov: 95,        // campo de visão inicial (evita deformação)
-        minHfov: 50,     // limite mínimo de zoom
-        maxHfov: 120,    // limite máximo de zoom
+        // 🔍 ZOOM TOTALMENTE LIVRE
+        hfov: 100,
 
         pitch: 0,
         yaw: 0
