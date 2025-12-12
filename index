@@ -26,7 +26,7 @@
 <script>
   pannellum.viewer('panorama', {
     type: 'equirectangular',
-    panorama: 'foto.jpg',
+    panorama: 'DJI_0210.jpg',
     autoLoad: true,
     showZoomCtrl: true,
     showFullscreenCtrl: true
