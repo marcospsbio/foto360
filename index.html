@@ -4,81 +4,59 @@
   <meta charset="utf-8">
   <title>Foto 360</title>
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Pannellum -->
   <link rel="stylesheet" href="./pannellum/pannellum.css">
 
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      background: #000;
-      font-family: Arial, sans-serif;
-    }
-
-    #panorama {
-      width: 100%;
-      height: 100vh;
-    }
-
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; font-family: Arial, sans-serif; }
+    #panorama { width: 100%; height: 100vh; }
     #erro {
-      position: fixed;
-      bottom: 16px;
-      left: 16px;
-      right: 16px;
-      padding: 12px;
-      background: rgba(0,0,0,0.75);
-      color: #fff;
-      font-size: 14px;
-      border-radius: 8px;
-      display: none;
-      z-index: 9999;
+      position: fixed; bottom: 16px; left: 16px; right: 16px;
+      padding: 12px; background: rgba(0,0,0,0.75); color: #fff;
+      font-size: 14px; border-radius: 8px; display: none; z-index: 9999;
     }
   </style>
 </head>
 
 <body>
+  <div id="panorama"></div>
+  <div id="erro"></div>
 
-<div id="panorama"></div>
-<div id="erro"></div>
+  <script src="./pannellum/pannellum.js"></script>
+  <script>
+    const erroBox = document.getElementById('erro');
+    function mostrarErro(msg) { erroBox.innerText = msg; erroBox.style.display = 'block'; }
 
-<script src="./pannellum/pannellum.js"></script>
-<script>
-  const erroBox = document.getElementById('erro');
+    if (typeof pannellum === "undefined") {
+      mostrarErro("Erro: Pannellum não carregou. Verifique pannellum.js e pannellum.css.");
+    } else {
+      try {
+        pannellum.viewer('panorama', {
+          type: 'equirectangular',
+          panorama: 'https://marcospsbio.github.io/foto360/DJI_0210.JPG',
 
-  function mostrarErro(msg) {
-    erroBox.innerText = msg;
-    erroBox.style.display = 'block';
-  }
+          autoLoad: true,
+          showZoomCtrl: true,
+          showFullscreenCtrl: true,
+          mouseZoom: true,
 
-  if (typeof pannellum === "undefined") {
-    mostrarErro("Erro: Pannellum não carregou. Verifique os arquivos pannellum.js e pannellum.css.");
-  } else {
-    try {
-      pannellum.viewer('panorama', {
-        type: 'equirectangular',
+          // Zoom inicial
+          hfov: 100,
 
-        // 🔴 URL ABSOLUTA DA IMAGEM
-        panorama: 'https://marcospsbio.github.io/foto360/DJI_0210.JPG',
+          // 🔥 LIBERA ZOOM NO CELULAR (quanto menor, mais zoom)
+          minHfov: 5,
 
-        autoLoad: true,
-        showZoomCtrl: true,
-        showFullscreenCtrl: true,
-        mouseZoom: true,
+          // (opcional) abre mais “grande angular” se quiser
+          maxHfov: 170,
 
-        // 🔍 ZOOM TOTALMENTE LIVRE
-        hfov: 100,
-
-        pitch: 0,
-        yaw: 0
-      });
-    } catch (e) {
-      mostrarErro("Erro ao carregar a foto 360: " + e.message);
+          pitch: 0,
+          yaw: 0
+        });
+      } catch (e) {
+        mostrarErro("Erro ao carregar a foto 360: " + e.message);
+      }
     }
-  }
-</script>
-
+  </script>
 </body>
 </html>
