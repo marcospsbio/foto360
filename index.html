@@ -1,62 +1,397 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <title>Foto 360</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Mapa + Fotos 360</title>
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-  <link rel="stylesheet" href="./pannellum/pannellum.css">
+  <!-- Pannellum -->
+  <link rel="stylesheet" href="https://unpkg.com/pannellum@2.5.6/build/pannellum.css"/>
 
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #000; font-family: Arial, sans-serif; }
-    #panorama { width: 100%; height: 100vh; }
-    #erro {
-      position: fixed; bottom: 16px; left: 16px; right: 16px;
-      padding: 12px; background: rgba(0,0,0,0.75); color: #fff;
-      font-size: 14px; border-radius: 8px; display: none; z-index: 9999;
+    html, body { height: 100%; margin: 0; background:#000; font-family: Arial, sans-serif; }
+    #map { height: 100vh; width: 100vw; }
+
+    #viewerOverlay { position: fixed; inset: 0; background: #000; display: none; z-index: 9999; }
+    #panorama { width: 100%; height: 100%; }
+
+    #miniMap {
+      position: absolute; left: 14px; bottom: 14px;
+      width: 220px; height: 150px;
+      border-radius: 12px; overflow: hidden;
+      border: 2px solid rgba(255,255,255,0.25);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+      cursor: pointer;
+    }
+    #miniHint {
+      position: absolute; left: 14px; bottom: 170px;
+      padding: 8px 10px; background: rgba(0,0,0,0.55);
+      color: #fff; border-radius: 10px; font-size: 12px;
+      user-select: none;
+    }
+
+    #topBar {
+      position: absolute; top: 12px; left: 12px; right: 12px;
+      display: flex; gap: 10px; align-items: center;
+      z-index: 10000; pointer-events: none;
+    }
+    .pill {
+      pointer-events: auto;
+      background: rgba(0,0,0,0.55); color: #fff;
+      padding: 10px 12px; border-radius: 999px; font-size: 14px;
+      display: inline-flex; gap: 8px; align-items: center;
+    }
+    .btn {
+      pointer-events: auto;
+      border: 0; border-radius: 999px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.10); color: #fff;
+      cursor: pointer;
+    }
+    .btn:hover { background: rgba(255,255,255,0.16); }
+
+    #thumbs {
+      position: absolute; right: 14px; bottom: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 10000; max-height: 55vh; overflow: auto; padding-right: 4px;
+    }
+    .thumb {
+      width: 64px; height: 64px;
+      border-radius: 12px; overflow: hidden;
+      border: 2px solid rgba(255,255,255,0.18);
+      cursor: pointer; background: rgba(255,255,255,0.06);
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb.active { border-color: rgba(255,255,255,0.8); }
+
+    #status {
+      position: fixed; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.55); color: #fff;
+      padding: 10px 12px; border-radius: 12px; font-size: 13px;
+      z-index: 12000;
+    }
+
+    #err {
+      position: fixed; left: 12px; bottom: 12px; right: 12px;
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 10px 12px; border-radius: 10px;
+      display: none; z-index: 20000; font-size: 13px;
     }
   </style>
 </head>
-
 <body>
+
+<div id="map"></div>
+
+<div id="viewerOverlay">
   <div id="panorama"></div>
-  <div id="erro"></div>
 
-  <script src="./pannellum/pannellum.js"></script>
-  <script>
-    const erroBox = document.getElementById('erro');
-    function mostrarErro(msg) { erroBox.innerText = msg; erroBox.style.display = 'block'; }
+  <div id="topBar">
+    <div class="pill" id="viewerTitle">Foto 360</div>
+    <button class="btn" id="btnClose">Voltar ao mapa</button>
+    <button class="btn" id="btnFullscreen">Tela cheia</button>
+  </div>
 
-    if (typeof pannellum === "undefined") {
-      mostrarErro("Erro: Pannellum não carregou. Verifique pannellum.js e pannellum.css.");
+  <div id="miniHint">Clique no mini-mapa para voltar ao mapa</div>
+  <div id="miniMap" title="Clique para voltar ao mapa"></div>
+
+  <div id="thumbs"></div>
+</div>
+
+<div id="status">Carregando fotos…</div>
+<div id="err"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/pannellum@2.5.6/build/pannellum.js"></script>
+
+<!-- EXIF no navegador (GPS etc.) -->
+<script src="https://unpkg.com/exifr/dist/lite.umd.js"></script>
+
+<!-- KML -> GeoJSON (opcional) -->
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+
+<script>
+  // ================== CONFIG ==================
+  const GITHUB_OWNER = "SEU_USUARIO"; // <- ajuste
+  const GITHUB_REPO  = "SEU_REPO";    // <- ajuste
+  const BRANCH       = "main";
+  const FOTOS_DIR    = "fotos";       // pasta onde você joga as fotos
+
+  // KML dos limites (opcional). Se não tiver, deixe null.
+  const KML_URL = "./property.kml";
+  const USA_KML = true; // mude para false se não quiser limites
+
+  // ================== UI helpers ==================
+  const errBox = document.getElementById("err");
+  const statusBox = document.getElementById("status");
+
+  function showErr(msg){
+    errBox.textContent = msg;
+    errBox.style.display = "block";
+    setTimeout(()=> errBox.style.display = "none", 6500);
+  }
+  function setStatus(msg){ statusBox.textContent = msg; }
+  function hideStatus(){ statusBox.style.display = "none"; }
+
+  function isMobile(){ return matchMedia("(max-width: 900px)").matches; }
+
+  // ================== MAPA ==================
+  const map = L.map("map", { zoomControl: true });
+
+  const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 20, attribution: "&copy; OpenStreetMap"
+  }).addTo(map);
+
+  const esriSat = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 20, attribution: "Tiles &copy; Esri" }
+  );
+
+  L.control.layers(
+    { "Mapa": osm, "Satélite": esriSat },
+    {},
+    { position: "topright" }
+  ).addTo(map);
+
+  const limitesLayer = L.geoJSON(null, {
+    style: { weight: 3, opacity: 0.9, fillOpacity: 0.05 }
+  }).addTo(map);
+
+  const markersLayer = L.layerGroup().addTo(map);
+
+  // ================== MINI MAPA ==================
+  const miniMap = L.map("miniMap", {
+    zoomControl: false, attributionControl: false,
+    dragging: false, scrollWheelZoom: false,
+    doubleClickZoom: false, boxZoom: false,
+    keyboard: false, tap: false
+  });
+  osm.addTo(miniMap);
+  const miniLimitesLayer = L.geoJSON(null, {
+    style: { weight: 2, opacity: 0.9, fillOpacity: 0.05 }
+  }).addTo(miniMap);
+
+  let miniMarker = null;
+
+  // ================== VIEWER 360 ==================
+  const overlay = document.getElementById("viewerOverlay");
+  const viewerTitle = document.getElementById("viewerTitle");
+  const btnClose = document.getElementById("btnClose");
+  const btnFullscreen = document.getElementById("btnFullscreen");
+  const thumbsEl = document.getElementById("thumbs");
+
+  let viewer = null;
+  let currentFotoId = null;
+  let FOTOS = []; // vai ser preenchido automaticamente
+
+  function openViewer(foto){
+    currentFotoId = foto.id;
+    viewerTitle.textContent = foto.titulo || foto.id;
+    overlay.style.display = "block";
+
+    if (viewer) {
+      try { viewer.destroy(); } catch(e) {}
+      viewer = null;
+      document.getElementById("panorama").innerHTML = "";
+    }
+
+    const hfovInicial = foto.hfov ?? (isMobile() ? 105 : 100);
+
+    viewer = pannellum.viewer("panorama", {
+      type: "equirectangular",
+      panorama: foto.url,
+      autoLoad: true,
+      showZoomCtrl: true,
+      showFullscreenCtrl: false,
+      mouseZoom: true,
+
+      // zoom liberado forte (mobile)
+      hfov: hfovInicial,
+      minHfov: 3,
+      maxHfov: 170,
+
+      yaw: foto.yaw || 0,
+      pitch: foto.pitch || 0
+    });
+
+    updateMiniMap(foto);
+    renderThumbs();
+  }
+
+  function closeViewer(){ overlay.style.display = "none"; }
+  btnClose.addEventListener("click", closeViewer);
+  document.getElementById("miniMap").addEventListener("click", closeViewer);
+
+  btnFullscreen.addEventListener("click", () => {
+    const el = overlay;
+    if (!document.fullscreenElement) el.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  });
+
+  function updateMiniMap(foto){
+    if (miniMarker) miniMap.removeLayer(miniMarker);
+    miniMarker = L.circleMarker([foto.lat, foto.lng], {
+      radius: 7, weight: 2, opacity: 1, fillOpacity: 0.9
+    }).addTo(miniMap);
+
+    const bounds = miniLimitesLayer.getBounds();
+    if (bounds.isValid()) {
+      const combined = bounds.extend([foto.lat, foto.lng]);
+      miniMap.fitBounds(combined.pad(0.15));
     } else {
-      try {
-        pannellum.viewer('panorama', {
-          type: 'equirectangular',
-          panorama: 'https://marcospsbio.github.io/foto360/DJI_0210.JPG',
+      miniMap.setView([foto.lat, foto.lng], 18);
+    }
+  }
 
-          autoLoad: true,
-          showZoomCtrl: true,
-          showFullscreenCtrl: true,
-          mouseZoom: true,
+  function renderThumbs(){
+    thumbsEl.innerHTML = "";
+    FOTOS.forEach(f => {
+      const d = document.createElement("div");
+      d.className = "thumb" + (f.id === currentFotoId ? " active" : "");
+      const img = document.createElement("img");
+      img.src = f.thumb || f.url;
+      img.alt = f.titulo || f.id;
+      d.appendChild(img);
+      d.addEventListener("click", () => openViewer(f));
+      thumbsEl.appendChild(d);
+    });
+  }
 
-          // Zoom inicial
-          hfov: 100,
+  // ================== KML (opcional) ==================
+  async function loadKml(){
+    if (!USA_KML) return;
+    try{
+      const resp = await fetch(KML_URL, { cache: "no-store" });
+      if (!resp.ok) throw new Error("Não consegui baixar o KML (HTTP " + resp.status + ")");
+      const text = await resp.text();
+      const xml = new DOMParser().parseFromString(text, "text/xml");
+      const gj = toGeoJSON.kml(xml);
 
-          // 🔥 LIBERA ZOOM NO CELULAR (quanto menor, mais zoom)
-          minHfov: 5,
+      limitesLayer.clearLayers(); limitesLayer.addData(gj);
+      miniLimitesLayer.clearLayers(); miniLimitesLayer.addData(gj);
 
-          // (opcional) abre mais “grande angular” se quiser
-          maxHfov: 170,
+      const b = limitesLayer.getBounds();
+      if (b.isValid()) map.fitBounds(b.pad(0.15));
+    } catch(e){
+      showErr("KML: " + e.message);
+    }
+  }
 
+  // ================== AUTO: listar pasta /fotos/ no GitHub ==================
+  async function listGithubFolderImages(){
+    const api = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${FOTOS_DIR}?ref=${BRANCH}`;
+    const r = await fetch(api, { cache: "no-store" });
+    if (!r.ok) throw new Error("GitHub API não respondeu (HTTP " + r.status + "). Repo está público?");
+    const items = await r.json();
+
+    // pega só imagens
+    const imgs = items.filter(it =>
+      it.type === "file" &&
+      /\.(jpg|jpeg|png|webp)$/i.test(it.name)
+    );
+
+    // ordena pelo nome (você pode mudar a regra)
+    imgs.sort((a,b)=> a.name.localeCompare(b.name, "pt-BR", { numeric: true, sensitivity: "base" }));
+
+    return imgs.map(it => ({
+      name: it.name,
+      url: it.download_url, // url direta (CORS OK)
+      id: it.sha.slice(0,8)
+    }));
+  }
+
+  // ================== AUTO: ler EXIF (GPS) ==================
+  async function buildFotosFromEXIF(files){
+    const fotos = [];
+    let ok = 0, semGps = 0;
+
+    for (let i=0; i<files.length; i++){
+      const f = files[i];
+      setStatus(`Lendo EXIF (${i+1}/${files.length})…`);
+
+      try{
+        // exifr consegue ler direto de URL na maioria dos casos
+        const data = await exifr.gps(f.url);
+
+        if (!data || typeof data.latitude !== "number" || typeof data.longitude !== "number"){
+          semGps++;
+          continue;
+        }
+
+        ok++;
+        fotos.push({
+          id: f.id,
+          titulo: f.name,
+          url: f.url,
+          thumb: f.url,
+          lat: data.latitude,
+          lng: data.longitude,
+          yaw: 0,
           pitch: 0,
-          yaw: 0
+          hfov: 100
         });
-      } catch (e) {
-        mostrarErro("Erro ao carregar a foto 360: " + e.message);
+      } catch(e){
+        // se falhar em alguma foto, pula
+        semGps++;
       }
     }
-  </script>
+
+    if (ok === 0){
+      throw new Error("Nenhuma foto com GPS no EXIF foi encontrada. As fotos precisam ter coordenadas embutidas.");
+    }
+
+    if (semGps > 0){
+      showErr(`${semGps} foto(s) sem GPS no EXIF foram ignoradas.`);
+    }
+
+    return fotos;
+  }
+
+  function addFotoMarkers(){
+    markersLayer.clearLayers();
+
+    FOTOS.forEach(foto => {
+      const m = L.circleMarker([foto.lat, foto.lng], {
+        radius: 8, weight: 2, opacity: 1, fillOpacity: 0.9
+      }).addTo(markersLayer);
+
+      m.bindTooltip(foto.titulo, { direction: "top", offset: [0, -8] });
+      m.on("click", () => openViewer(foto));
+    });
+
+    // enquadra
+    if (limitesLayer.getBounds().isValid()){
+      map.fitBounds(limitesLayer.getBounds().pad(0.15));
+    } else {
+      const b = L.latLngBounds(FOTOS.map(f => [f.lat, f.lng]));
+      map.fitBounds(b.pad(0.25));
+    }
+  }
+
+  // ================== INIT ==================
+  (async function init(){
+    try{
+      setStatus("Listando fotos no GitHub…");
+      const files = await listGithubFolderImages();
+
+      if (!files.length) throw new Error(`Nenhuma imagem encontrada em /${FOTOS_DIR}/`);
+
+      setStatus(`Encontradas ${files.length} imagens. Lendo GPS…`);
+      FOTOS = await buildFotosFromEXIF(files);
+
+      await loadKml();
+
+      addFotoMarkers();
+      hideStatus();
+    } catch(e){
+      showErr(e.message);
+      setStatus("Erro. Veja a mensagem abaixo.");
+    }
+  })();
+</script>
+
 </body>
 </html>
